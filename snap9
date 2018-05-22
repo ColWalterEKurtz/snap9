@@ -1,0 +1,1465 @@
+#!/bin/bash
+
+# ------------------------------------------------------------------------------
+# settings                                                              settings
+# ------------------------------------------------------------------------------
+set -o errtrace  # any trap on ERR is inherited by shell functions,
+                 #   command substitutions, and commands executed in a subshell
+                 #   environment
+set -o nounset   # treat unset variables and parameters other than the special
+                 #   parameters "@" and "*" as an error when performing
+                 #   parameter expansion
+set -o pipefail  # the return value of a pipeline is the value of the last
+                 #   (rightmost) command to exit with a non-zero status, or
+                 #   zero if all commands in the pipeline exit successfully
+
+# set language
+export LANG="en_US.UTF-8"
+
+# use dot as decimal separator
+export LC_NUMERIC="en_US.UTF-8"
+
+# terminal colors
+readonly    NONE=$(tput sgr0)
+readonly     RED=$(tput setaf 1)
+readonly   GREEN=$(tput setaf 2)
+readonly  YELLOW=$(tput setaf 3)
+readonly    BLUE=$(tput setaf 4)
+readonly MAGENTA=$(tput setaf 5)
+readonly    CYAN=$(tput setaf 6)
+readonly   WHITE=$(tput setaf 7)
+
+# ------------------------------------------------------------------------------
+# functions                                                            functions
+# ------------------------------------------------------------------------------
+
+# -------
+# failmsg
+# -------
+#
+# This function prints a red colored message via stderr.
+#
+function failmsg()
+{
+  # push to stderr
+  echo -e "${RED}[FAIL]${NONE} $1" 1>&2
+}
+
+# -------
+# warnmsg
+# -------
+#
+# This function prints a yellow colored message via stderr.
+#
+function warnmsg()
+{
+  # push to stderr
+  echo -e "${YELLOW}[WARN]${NONE} $1" 1>&2
+}
+
+# -------
+# infomsg
+# -------
+#
+# This function prints a blue colored message via stderr.
+#
+function infomsg()
+{
+  # push to stderr
+  echo -e "${BLUE}[INFO]${NONE} $1" 1>&2
+}
+
+# -------
+# donemsg
+# -------
+#
+# This function prints a green colored message via stderr.
+#
+function donemsg()
+{
+  # push to stderr
+  echo -e "${GREEN}[DONE]${NONE} $1" 1>&2
+}
+
+# -----------------
+# get_next_dir_name
+# -----------------
+#
+#
+#
+function get_next_dir_name()
+{
+  # get bc term
+  local TERM=$(find -maxdepth "1"                        \
+                    -type "d"                            \
+                    -regextype "posix-extended"          \
+                    -regex ".+/[[:digit:]]{4}$"          \
+               | sort --general-numeric-sort             \
+               | tail -n 1                               \
+               | sed -nre "s|.+/([[:digit:]]+)$|\1|p"    \
+               | sed -nre "s|^0*([[:digit:]]+)$|\1 + 1|p")
+
+  # no matching directory found
+  if [ -z "$TERM" ] ; then
+
+    # set initial name
+    local TERM="1"
+
+  fi
+
+  # push name to stdout
+  printf "%04d/" $(bc <<< "$TERM")
+
+  # signalize success
+  return 0
+}
+
+# -------------------
+# get_target_filename
+# -------------------
+#
+# $1  video filename
+#
+function get_target_filename()
+{
+  basename "$1"           \
+  | sed --quiet           \
+        --regexp-extended \
+        --expression="
+
+          # remove current extension
+          s/(.+)\.[^\.]+$/\1/
+
+          # replace all (groups of) whitespace characters
+          s/[[:space:]]+/_/g
+
+          # replace each special character
+          s/[^[:alnum:]]/_/g
+
+          # trim new filename
+          s/^_//
+          s/_$//
+
+          # append new extension
+          s/.+/&.png/p
+        "
+
+  # signalize success
+  return 0
+}
+
+# ----------------
+# show_crop_script
+# ----------------
+#
+# $1  video file
+#
+function show_crop_script()
+{
+  echo "#!/bin/bash"
+  echo
+  echo "# ------------------------------------------------------------------------------"
+  echo "# settings                                                              settings"
+  echo "# ------------------------------------------------------------------------------"
+  echo "set -o errtrace  # any trap on ERR is inherited by shell functions,"
+  echo "                 #   command substitutions, and commands executed in a subshell"
+  echo "                 #   environment"
+  echo "set -o nounset   # treat unset variables and parameters other than the special"
+  echo "                 #   parameters \"@\" and \"*\" as an error when performing"
+  echo "                 #   parameter expansion"
+  echo "set -o pipefail  # the return value of a pipeline is the value of the last"
+  echo "                 #   (rightmost) command to exit with a non-zero status, or"
+  echo "                 #   zero if all commands in the pipeline exit successfully"
+  echo
+  echo "# set language"
+  echo "export LANG=\"en_US.UTF-8\""
+  echo
+  echo "# use dot as decimal separator"
+  echo "export LC_NUMERIC=\"en_US.UTF-8\""
+  echo
+  echo "# terminal colors"
+  echo "readonly    NONE=\$(tput sgr0)"
+  echo "readonly     RED=\$(tput setaf 1)"
+  echo "readonly   GREEN=\$(tput setaf 2)"
+  echo "readonly  YELLOW=\$(tput setaf 3)"
+  echo "readonly    BLUE=\$(tput setaf 4)"
+  echo "readonly MAGENTA=\$(tput setaf 5)"
+  echo "readonly    CYAN=\$(tput setaf 6)"
+  echo "readonly   WHITE=\$(tput setaf 7)"
+  echo
+  echo "# the video file to operate"
+  echo "readonly GLOBAL_SOURCEFILE=\"$1\""
+  echo
+  echo "# the name of the resulting file"
+  echo "readonly GLOBAT_TARGETFILE=\"cropdata\""
+  echo
+  echo "# ------------------------------------------------------------------------------"
+  echo "# functions                                                            functions"
+  echo "# ------------------------------------------------------------------------------"
+  echo
+  echo "# -------"
+  echo "# failmsg"
+  echo "# -------"
+  echo "#"
+  echo "# This function prints a red colored message via stderr."
+  echo "#"
+  echo "function failmsg()"
+  echo "{"
+  echo "  # push to stderr"
+  echo "  echo -e \"\${RED}[FAIL]\${NONE} \$1\" 1>&2"
+  echo "}"
+  echo
+  echo "# -------"
+  echo "# warnmsg"
+  echo "# -------"
+  echo "#"
+  echo "# This function prints a yellow colored message via stderr."
+  echo "#"
+  echo "function warnmsg()"
+  echo "{"
+  echo "  # push to stderr"
+  echo "  echo -e \"\${YELLOW}[WARN]\${NONE} \$1\" 1>&2"
+  echo "}"
+  echo
+  echo "# -------"
+  echo "# infomsg"
+  echo "# -------"
+  echo "#"
+  echo "# This function prints a blue colored message via stderr."
+  echo "#"
+  echo "function infomsg()"
+  echo "{"
+  echo "  # push to stderr"
+  echo "  echo -e \"\${BLUE}[INFO]\${NONE} \$1\" 1>&2"
+  echo "}"
+  echo
+  echo "# -------"
+  echo "# donemsg"
+  echo "# -------"
+  echo "#"
+  echo "# This function prints a green colored message via stderr."
+  echo "#"
+  echo "function donemsg()"
+  echo "{"
+  echo "  # push to stderr"
+  echo "  echo -e \"\${GREEN}[DONE]\${NONE} \$1\" 1>&2"
+  echo "}"
+  echo
+  echo "# ---------------"
+  echo "# get_video_stats"
+  echo "# ---------------"
+  echo "#"
+  echo "# \$1  video file"
+  echo "#"
+  echo "function get_video_stats()"
+  echo "{"
+  echo "  # push all information to stdout"
+  echo "  mplayer -vo \"null\"  \\"
+  echo "          -ao \"null\"  \\"
+  echo "          -frames \"0\" \\"
+  echo "          -identify   \\"
+  echo "          \"\$1\"        \\"
+  echo "          2>\"/dev/null\""
+  echo "}"
+  echo
+  echo "# ----------------"
+  echo "# get_video_length"
+  echo "# ----------------"
+  echo "#"
+  echo "# \$1  video file"
+  echo "#"
+  echo "function get_video_length()"
+  echo "{"
+  echo "  # get length in seconds (cut off decimal places)"
+  echo "  local LENGTH=\$(get_video_stats \"\$1\" | sed -nre \"/^ID_LENGTH=/{ s/^.+=// ; s/\\.[^\\.]+\$// ; p }\")"
+  echo
+  echo "  # no length information found"
+  echo "  [ -z \"\$LENGTH\" ] && return 1"
+  echo
+  echo "  # push length to stdout"
+  echo "  printf \"%d\" \"\$LENGTH\""
+  echo
+  echo "  # signalize success"
+  echo "  return 0"
+  echo "}"
+  echo
+  echo "# ---------------"
+  echo "# get_video_width"
+  echo "# ---------------"
+  echo "#"
+  echo "# \$1  video file"
+  echo "#"
+  echo "function get_video_width()"
+  echo "{"
+  echo "  # get width in pixels"
+  echo "  local WIDTH=\$(get_video_stats \"\$1\" | sed -nre \"s/^ID_VIDEO_WIDTH=([[:digit:]]+)\$/\\1/p\")"
+  echo
+  echo "  # no width information found"
+  echo "  [ -z \"\$WIDTH\" ] && return 1"
+  echo
+  echo "  # push width to stdout"
+  echo "  printf \"%d\" \"\$WIDTH\""
+  echo
+  echo "  # signalize success"
+  echo "  return 0"
+  echo "}"
+  echo
+  echo "# ----------------"
+  echo "# get_video_height"
+  echo "# ----------------"
+  echo "#"
+  echo "# \$1  video file"
+  echo "#"
+  echo "function get_video_height()"
+  echo "{"
+  echo "  # get height in pixels"
+  echo "  local HEIGHT=\$(get_video_stats \"\$1\" | sed -nre \"s/^ID_VIDEO_HEIGHT=([[:digit:]]+)\$/\\1/p\")"
+  echo
+  echo "  # no height information found"
+  echo "  [ -z \"\$HEIGHT\" ] && return 1"
+  echo
+  echo "  # push height to stdout"
+  echo "  printf \"%d\" \"\$HEIGHT\""
+  echo
+  echo "  # signalize success"
+  echo "  return 0"
+  echo "}"
+  echo
+  echo "# -------------"
+  echo "# get_video_fps"
+  echo "# -------------"
+  echo "#"
+  echo "# \$1  video file"
+  echo "#"
+  echo "function get_video_fps()"
+  echo "{"
+  echo "  # get frames per second"
+  echo "  local FPS=\$(get_video_stats \"\$1\"                   \\"
+  echo "              | sed -nre \"s/^ID_VIDEO_FPS=(.+)/\\1/p\" \\"
+  echo "              | sed -re \"s/0+\$//\"                    \\"
+  echo "              | sed -re \"s/\\.\$//\"                    )"
+  echo
+  echo "  # no frames per second information found"
+  echo "  [ -z \"\$FPS\" ] && return 1"
+  echo
+  echo "  # push frames per second to stdout"
+  echo "  printf \"%s\" \"\$FPS\""
+  echo
+  echo "  # signalize success"
+  echo "  return 0"
+  echo "}"
+  echo
+  echo "# -------------"
+  echo "# is_video_file"
+  echo "# -------------"
+  echo "#"
+  echo "# \$1  video file"
+  echo "#"
+  echo "function is_video_file()"
+  echo "{"
+  echo "  # no regular file given"
+  echo "  [ ! -f \"\$1\" ] && return 1"
+  echo
+  echo "  # try to get video width"
+  echo "  get_video_width \"\$1\" > \"/dev/null\" || return 1"
+  echo
+  echo "  # video file given"
+  echo "  return 0"
+  echo "}"
+  echo
+  echo "# ------------------------------------------------------------------------------"
+  echo "# commands                                                              commands"
+  echo "# ------------------------------------------------------------------------------"
+  echo
+  echo "# check format"
+  echo "if ! is_video_file \"\$GLOBAL_SOURCEFILE\" ; then"
+  echo
+  echo "  # notify user"
+  echo "  failmsg \"no video file given: \\\"\$GLOBAL_SOURCEFILE\\\"\""
+  echo
+  echo "  # signalize trouble"
+  echo "  exit 1"
+  echo
+  echo "fi"
+  echo
+  echo "# get video length in seconds"
+  echo "LENGTH=\$(get_video_length \"\$GLOBAL_SOURCEFILE\")"
+  echo
+  echo "# check video length"
+  echo "if (( LENGTH < 60 )) ; then"
+  echo
+  echo "  # notify user"
+  echo "  failmsg \"the video must be at least 60 seconds long: \$GLOBAL_SOURCEFILE\""
+  echo
+  echo "  # signalize trouble"
+  echo "  exit 1"
+  echo
+  echo "fi"
+  echo
+  echo "# get number of frames per second (cut off decimal places)"
+  echo "FPS=\$(get_video_fps \"\$GLOBAL_SOURCEFILE\" | sed -nre \"s|.+|scale=0; & / 1;\\n|p\" | bc)"
+  echo
+  echo "# check frames per second"
+  echo "if (( FPS < 20 )) ; then"
+  echo
+  echo "  # notify user"
+  echo "  failmsg \"the video must have at least 20 frames per second: \$GLOBAL_SOURCEFILE\""
+  echo
+  echo "  # signalize trouble"
+  echo "  exit 1"
+  echo
+  echo "fi"
+  echo
+  echo "# reset target file"
+  echo "rm -f \"\$GLOBAT_TARGETFILE\""
+  echo
+  echo "# find crop settings (from 20 to at most 50 seconds)"
+  echo "mplayer -benchmark                                             \\"
+  echo "        -nosound                                               \\"
+  echo "        -ss 20                                                 \\"
+  echo "        -frames 120                                            \\"
+  echo "        -vf \"cropdetect,framestep=5\"                           \\"
+  echo "        -vo \"aa\"                                               \\"
+  echo "        -monitorpixelaspect \"0.5\"                              \\"
+  echo "        \"\$GLOBAL_SOURCEFILE\"                                   \\"
+  echo "        2>\"/dev/null\"                                          \\"
+  echo "| sed -nre \"s/^\\[CROP\\].+\\(-vf (crop=[[:digit:]:]+)\\)\\.\$/\\1/p\" \\"
+  echo "| sort                                                         \\"
+  echo "| uniq                                                         \\"
+  echo "> \"\$GLOBAT_TARGETFILE\""
+  echo
+  echo "# empty crop file"
+  echo "if [ ! -s \"\$GLOBAT_TARGETFILE\" ] ; then"
+  echo
+  echo "  # notify user"
+  echo "  warnmsg \"unable to get crop settings: \$GLOBAL_SOURCEFILE\""
+  echo
+  echo "  # get total width and height"
+  echo "   WTOTAL=\$(get_video_width \"\$GLOBAL_SOURCEFILE\")"
+  echo "   HTOTAL=\$(get_video_height \"\$GLOBAL_SOURCEFILE\")"
+  echo
+  echo "  # create default crop file"
+  echo "  echo \"crop=\$WTOTAL:\$HTOTAL:0:0\" > \"\$CROPFILE\""
+  echo
+  echo "fi"
+  echo
+  echo "# get number of different crop settings"
+  echo "CNUM=\$(sed -nre \"s/^crop=.+/&/p\" \"\$GLOBAT_TARGETFILE\" | wc -l)"
+  echo
+  echo "# too many settings found"
+  echo "if (( CNUM > 1 )) ; then"
+  echo
+  echo "  # notify user"
+  echo "  warnmsg \"too many crop settings found: \$GLOBAL_SOURCEFILE\""
+  echo
+  echo "fi"
+  echo
+  echo "# signalize success"
+  echo "exit 0"
+}
+
+# ----------------
+# show_snap_script
+# ----------------
+#
+# $1  video file
+#
+function show_snap_script()
+{
+  echo "#!/bin/bash"
+  echo
+  echo "# ------------------------------------------------------------------------------"
+  echo "# settings                                                              settings"
+  echo "# ------------------------------------------------------------------------------"
+  echo "set -o errtrace  # any trap on ERR is inherited by shell functions,"
+  echo "                 #   command substitutions, and commands executed in a subshell"
+  echo "                 #   environment"
+  echo "set -o nounset   # treat unset variables and parameters other than the special"
+  echo "                 #   parameters \"@\" and \"*\" as an error when performing"
+  echo "                 #   parameter expansion"
+  echo "set -o pipefail  # the return value of a pipeline is the value of the last"
+  echo "                 #   (rightmost) command to exit with a non-zero status, or"
+  echo "                 #   zero if all commands in the pipeline exit successfully"
+  echo
+  echo "# set language"
+  echo "export LANG=\"en_US.UTF-8\""
+  echo
+  echo "# use dot as decimal separator"
+  echo "export LC_NUMERIC=\"en_US.UTF-8\""
+  echo
+  echo "# terminal colors"
+  echo "readonly    NONE=\$(tput sgr0)"
+  echo "readonly     RED=\$(tput setaf 1)"
+  echo "readonly   GREEN=\$(tput setaf 2)"
+  echo "readonly  YELLOW=\$(tput setaf 3)"
+  echo "readonly    BLUE=\$(tput setaf 4)"
+  echo "readonly MAGENTA=\$(tput setaf 5)"
+  echo "readonly    CYAN=\$(tput setaf 6)"
+  echo "readonly   WHITE=\$(tput setaf 7)"
+  echo
+  echo "# the video file to operate"
+  echo "readonly GLOBAL_SOURCEFILE=\"$1\""
+  echo
+  echo "# ------------------------------------------------------------------------------"
+  echo "# functions                                                            functions"
+  echo "# ------------------------------------------------------------------------------"
+  echo
+  echo "# -------"
+  echo "# failmsg"
+  echo "# -------"
+  echo "#"
+  echo "# This function prints a red colored message via stderr."
+  echo "#"
+  echo "function failmsg()"
+  echo "{"
+  echo "  # push to stderr"
+  echo "  echo -e \"\${RED}[FAIL]\${NONE} \$1\" 1>&2"
+  echo "}"
+  echo
+  echo "# -------"
+  echo "# warnmsg"
+  echo "# -------"
+  echo "#"
+  echo "# This function prints a yellow colored message via stderr."
+  echo "#"
+  echo "function warnmsg()"
+  echo "{"
+  echo "  # push to stderr"
+  echo "  echo -e \"\${YELLOW}[WARN]\${NONE} \$1\" 1>&2"
+  echo "}"
+  echo
+  echo "# -------"
+  echo "# infomsg"
+  echo "# -------"
+  echo "#"
+  echo "# This function prints a blue colored message via stderr."
+  echo "#"
+  echo "function infomsg()"
+  echo "{"
+  echo "  # push to stderr"
+  echo "  echo -e \"\${BLUE}[INFO]\${NONE} \$1\" 1>&2"
+  echo "}"
+  echo
+  echo "# -------"
+  echo "# donemsg"
+  echo "# -------"
+  echo "#"
+  echo "# This function prints a green colored message via stderr."
+  echo "#"
+  echo "function donemsg()"
+  echo "{"
+  echo "  # push to stderr"
+  echo "  echo -e \"\${GREEN}[DONE]\${NONE} \$1\" 1>&2"
+  echo "}"
+  echo
+  echo "# ---------------"
+  echo "# get_video_stats"
+  echo "# ---------------"
+  echo "#"
+  echo "# \$1  video file"
+  echo "#"
+  echo "function get_video_stats()"
+  echo "{"
+  echo "  # push all information to stdout"
+  echo "  mplayer -vo \"null\"  \\"
+  echo "          -ao \"null\"  \\"
+  echo "          -frames \"0\" \\"
+  echo "          -identify   \\"
+  echo "          \"\$1\"        \\"
+  echo "          2>\"/dev/null\""
+  echo "}"
+  echo
+  echo "# ----------------"
+  echo "# get_video_length"
+  echo "# ----------------"
+  echo "#"
+  echo "# \$1  video file"
+  echo "#"
+  echo "function get_video_length()"
+  echo "{"
+  echo "  # get length in seconds (cut off decimal places)"
+  echo "  local LENGTH=\$(get_video_stats \"\$1\" | sed -nre \"/^ID_LENGTH=/{ s/^.+=// ; s/\\.[^\\.]+\$// ; p }\")"
+  echo
+  echo "  # no length information found"
+  echo "  [ -z \"\$LENGTH\" ] && return 1"
+  echo
+  echo "  # push length to stdout"
+  echo "  printf \"%d\" \"\$LENGTH\""
+  echo
+  echo "  # signalize success"
+  echo "  return 0"
+  echo "}"
+  echo
+  echo "# ---------------"
+  echo "# get_video_width"
+  echo "# ---------------"
+  echo "#"
+  echo "# \$1  video file"
+  echo "#"
+  echo "function get_video_width()"
+  echo "{"
+  echo "  # get width in pixels"
+  echo "  local WIDTH=\$(get_video_stats \"\$1\" | sed -nre \"s/^ID_VIDEO_WIDTH=([[:digit:]]+)\$/\\1/p\")"
+  echo
+  echo "  # no width information found"
+  echo "  [ -z \"\$WIDTH\" ] && return 1"
+  echo
+  echo "  # push width to stdout"
+  echo "  printf \"%d\" \"\$WIDTH\""
+  echo
+  echo "  # signalize success"
+  echo "  return 0"
+  echo "}"
+  echo
+  echo "# ----------------"
+  echo "# get_video_height"
+  echo "# ----------------"
+  echo "#"
+  echo "# \$1  video file"
+  echo "#"
+  echo "function get_video_height()"
+  echo "{"
+  echo "  # get height in pixels"
+  echo "  local HEIGHT=\$(get_video_stats \"\$1\" | sed -nre \"s/^ID_VIDEO_HEIGHT=([[:digit:]]+)\$/\\1/p\")"
+  echo
+  echo "  # no height information found"
+  echo "  [ -z \"\$HEIGHT\" ] && return 1"
+  echo
+  echo "  # push height to stdout"
+  echo "  printf \"%d\" \"\$HEIGHT\""
+  echo
+  echo "  # signalize success"
+  echo "  return 0"
+  echo "}"
+  echo
+  echo "# -------------"
+  echo "# get_video_fps"
+  echo "# -------------"
+  echo "#"
+  echo "# \$1  video file"
+  echo "#"
+  echo "function get_video_fps()"
+  echo "{"
+  echo "  # get frames per second"
+  echo "  local FPS=\$(get_video_stats \"\$1\"                   \\"
+  echo "              | sed -nre \"s/^ID_VIDEO_FPS=(.+)/\\1/p\" \\"
+  echo "              | sed -re \"s/0+\$//\"                    \\"
+  echo "              | sed -re \"s/\\.\$//\"                    )"
+  echo
+  echo "  # no frames per second information found"
+  echo "  [ -z \"\$FPS\" ] && return 1"
+  echo
+  echo "  # push frames per second to stdout"
+  echo "  printf \"%s\" \"\$FPS\""
+  echo
+  echo "  # signalize success"
+  echo "  return 0"
+  echo "}"
+  echo
+  echo "# -------------"
+  echo "# is_video_file"
+  echo "# -------------"
+  echo "#"
+  echo "# \$1  video file"
+  echo "#"
+  echo "function is_video_file()"
+  echo "{"
+  echo "  # no regular file given"
+  echo "  [ ! -f \"\$1\" ] && return 1"
+  echo
+  echo "  # try to get video width"
+  echo "  get_video_width \"\$1\" > \"/dev/null\" || return 1"
+  echo
+  echo "  # video file given"
+  echo "  return 0"
+  echo "}"
+  echo
+  echo "# --------------------"
+  echo "# create_manual_stills"
+  echo "# --------------------"
+  echo "#"
+  echo "#"
+  echo "#"
+  echo "function create_manual_stills()"
+  echo "{"
+  echo "  # get video length in seconds"
+  echo "  local VLENSEC=\$(get_video_length \"\$GLOBAL_SOURCEFILE\")"
+  echo
+  echo "  # calculate maximum offset (20 second steps)"
+  echo "  local MAXOFF=\$(bc <<< \"scale=0; \$VLENSEC / 20 - 1\")"
+  echo
+  echo "  # create stills"
+  echo "  for (( OFFSET=0 ; OFFSET <= MAXOFF; OFFSET++ ))"
+  echo "  do"
+  echo
+  echo "    # set offset each 20 seconds"
+  echo "    local STARTSEC=\$(bc <<< \"\$OFFSET * 20\")"
+  echo
+  echo "    # create 3 stills with a gap of 100 frames at this position"
+  echo "    mplayer -benchmark           \\"
+  echo "            -nosound             \\"
+  echo "            -ss \"\$STARTSEC\"      \\"
+  echo "            -frames 3            \\"
+  echo "            -vf \"framestep=100\"  \\"
+  echo "            -vo \"png:z=9\"        \\"
+  echo "            \"\$GLOBAL_SOURCEFILE\" \\"
+  echo "            &>\"/dev/null\""
+  echo
+  echo "    # old filenames (mplayer output)"
+  echo "    local OLD1=\"00000001.png\" "
+  echo "    local OLD2=\"00000002.png\" "
+  echo "    local OLD3=\"00000003.png\" "
+  echo
+  echo "    # check resulting files"
+  echo "    if [ ! -s \"\$OLD1\" ] || [ ! -s \"\$OLD2\" ] || [ ! -s \"\$OLD3\" ] ; then"
+  echo
+  echo "      # notify user"
+  echo "      warnmsg \"unable to create snapshot from \$GLOBAL_SOURCEFILE at \$STARTSEC sec\""
+  echo
+  echo "      # next cycle"
+  echo "      continue"
+  echo
+  echo "    fi"
+  echo
+  echo "    # new filenames"
+  echo "    local NEW1=\$(printf \"zzz-%06d-1.png\" \"\$STARTSEC\")"
+  echo "    local NEW2=\$(printf \"zzz-%06d-2.png\" \"\$STARTSEC\")"
+  echo "    local NEW3=\$(printf \"zzz-%06d-3.png\" \"\$STARTSEC\")"
+  echo
+  echo "    # rename recent stills"
+  echo "    mv -f \"\$OLD1\" \"\$NEW1\""
+  echo "    mv -f \"\$OLD2\" \"\$NEW2\""
+  echo "    mv -f \"\$OLD3\" \"\$NEW3\""
+  echo
+  echo "    # show progress"
+  echo "    infomsg \"snapshots created:  \$NEW1  \$NEW2  \$NEW3\""
+  echo
+  echo "  done"
+  echo
+  echo "  # signalize success"
+  echo "  return 0"
+  echo "}"
+  echo
+  echo "# ----"
+  echo "# ymxb"
+  echo "# ----"
+  echo "#"
+  echo "# \$1  x"
+  echo "# \$2  P1x"
+  echo "# \$3  P1y"
+  echo "# \$4  P2x"
+  echo "# \$5  P2y"
+  echo "#"
+  echo "function ymxb()"
+  echo "{"
+  echo "  # name positional parameters"
+  echo "  local readonly   x=\"\$1\""
+  echo "  local readonly P1x=\"\$2\""
+  echo "  local readonly P1y=\"\$3\""
+  echo "  local readonly P2x=\"\$4\""
+  echo "  local readonly P2y=\"\$5\""
+  echo
+  echo "  # calculate y (and round to nearest integer)"
+  echo "  echo \"scale = 2"
+  echo "        y = ((\$P2y - \$P1y) / (\$P2x - \$P1x) * (\$x - \$P1x) + \$P1y)"
+  echo "        if (y <  0) { y = y - 0.5 }"
+  echo "        if (y >= 0) { y = y + 0.5 }"
+  echo "        scale = 0"
+  echo "        y / 1\" \\"
+  echo "  | bc"
+  echo "}"
+  echo
+  echo "# ------------------"
+  echo "# create_auto_stills"
+  echo "# ------------------"
+  echo "#"
+  echo "#"
+  echo "#"
+  echo "function create_auto_stills()"
+  echo "{"
+  echo "  # check shift limits"
+  echo "  local INSIDE=\$(bc <<< \"r = 0; if (\$ARG_SHIFT < -5) { r = 1 }; if (\$ARG_SHIFT > 5) { r = 1 }; r\")"
+  echo
+  echo "  # check flag"
+  echo "  if (( INSIDE == 1 )) ; then"
+  echo
+  echo "    # notify user"
+  echo "    failmsg \"shift out of limits [-5.0; 5.0]: \$ARG_SHIFT\""
+  echo
+  echo "    # signalize trouble"
+  echo "    return 1"
+  echo
+  echo "  fi"
+  echo
+  echo "  # get video length in seconds"
+  echo "  local VLENSEC=\$(get_video_length \"\$GLOBAL_SOURCEFILE\")"
+  echo
+  echo "  # snapshot positions in percent (9 steps needed)"
+  echo "  local readonly STEPS=\"5 10 15 40 50 60 85 90 95\""
+  echo
+  echo "  # get snapshots"
+  echo "  for STEP in \$STEPS"
+  echo "  do"
+  echo
+  echo "    # set percentual offset"
+  echo "    local STARTSEC=\$(ymxb \"(\$STEP + \$ARG_SHIFT)\" 0 0 100 \"\$VLENSEC\")"
+  echo
+  echo "    # create 1 still at this position"
+  echo "    mplayer -benchmark           \\"
+  echo "            -nosound             \\"
+  echo "            -ss \"\$STARTSEC\"      \\"
+  echo "            -frames 1            \\"
+  echo "            -vo \"png:z=9\"        \\"
+  echo "            \"\$GLOBAL_SOURCEFILE\" \\"
+  echo "            &>\"/dev/null\""
+  echo
+  echo "    # old filename (mplayer output)"
+  echo "    local OLD1=\"00000001.png\" "
+  echo
+  echo "    # check resulting file"
+  echo "    if [ ! -s \"\$OLD1\" ] ; then"
+  echo
+  echo "      # notify user"
+  echo "      warnmsg \"unable to create snapshot from \$GLOBAL_SOURCEFILE at \$STARTSEC sec\""
+  echo
+  echo "      # next cycle"
+  echo "      continue"
+  echo
+  echo "    fi"
+  echo
+  echo "    # new filename"
+  echo "    local NEW1=\$(printf \"zzz-%06d-1.png\" \"\$STARTSEC\")"
+  echo
+  echo "    # rename recent still"
+  echo "    mv -f \"\$OLD1\" \"\$NEW1\""
+  echo
+  echo "    # show progress"
+  echo "    infomsg \"snapshot created: \$NEW1\""
+  echo
+  echo "  done"
+  echo
+  echo "  # signalize success"
+  echo "  return 0"
+  echo "}"
+  echo
+  echo "# ------------------------------------------------------------------------------"
+  echo "# options                                                                options"
+  echo "# ------------------------------------------------------------------------------"
+  echo
+  echo "# set default values"
+  echo "RUN_MODE=\"MANUAL\""
+  echo "ARG_SHIFT=0"
+  echo
+  echo "# set options to accept"
+  echo "readonly KNOWN_OPTIONS=\":ha:\""
+  echo
+  echo "# check passed options"
+  echo "while getopts \"\$KNOWN_OPTIONS\" OPTION \"\$@\""
+  echo "do"
+  echo
+  echo "  case \"\$OPTION\" in"
+  echo
+  echo "    # show help"
+  echo "    \"h\") RUN_MODE=\"SHOW_HELP\""
+  echo "         ;;"
+  echo
+  echo "    # set AUTO mode"
+  echo "    \"a\") RUN_MODE=\"AUTO\""
+  echo "         ARG_SHIFT=\"\$OPTARG\""
+  echo "         ;;"
+  echo
+  echo "    \"?\") failmsg \"unknown option: -\$OPTARG\""
+  echo "         exit 1"
+  echo "         ;;"
+  echo
+  echo "    \":\") failmsg \"missing argument: -\$OPTARG <argument>\""
+  echo "         exit 1"
+  echo "         ;;"
+  echo
+  echo "  esac"
+  echo
+  echo "done"
+  echo
+  echo "# get number of positional parameters"
+  echo "PPNUM=\$(( \$# - OPTIND + 1 ))"
+  echo
+  echo "# drop all parsed options"
+  echo "shift \$(( OPTIND - 1 ))"
+  echo
+  echo "# ------------------------------------------------------------------------------"
+  echo "# commands                                                              commands"
+  echo "# ------------------------------------------------------------------------------"
+  echo
+  echo "# show help"
+  echo "if [ \"\$RUN_MODE\" == \"SHOW_HELP\" ] ; then"
+  echo
+  echo "  # show syntax"
+  echo "  echo"
+  echo "  echo \"\$(basename \"\$0\") [{-h|-a <shift>}]\""
+  echo "  echo \"snap -h          show help and exit\""
+  echo "  echo \"snap -a <shift>  take 9 snapshots automatically\""
+  echo "  echo \"                   shift default snapshot positions by <shift> percent (-5 ... +5)\""
+  echo "  echo"
+  echo
+  echo "  # signalize success"
+  echo "  exit 0"
+  echo
+  echo "fi"
+  echo
+  echo "# check format"
+  echo "if ! is_video_file \"\$GLOBAL_SOURCEFILE\" ; then"
+  echo
+  echo "  # notify user"
+  echo "  failmsg \"no video file given: \\\"\$GLOBAL_SOURCEFILE\\\"\""
+  echo
+  echo "  # signalize trouble"
+  echo "  exit 1"
+  echo
+  echo "fi"
+  echo
+  echo "# get video length in seconds"
+  echo "LENGTH=\$(get_video_length \"\$GLOBAL_SOURCEFILE\")"
+  echo
+  echo "# check video length"
+  echo "if (( LENGTH < 60 )) ; then"
+  echo
+  echo "  # notify user"
+  echo "  failmsg \"the video must be at least 60 seconds long: \$GLOBAL_SOURCEFILE\""
+  echo
+  echo "  # signalize trouble"
+  echo "  exit 1"
+  echo
+  echo "fi"
+  echo
+  echo "# get number of frames per second (cut off decimal places)"
+  echo "FPS=\$(get_video_fps \"\$GLOBAL_SOURCEFILE\" | sed -nre \"s|.+|scale=0; & / 1;\\n|p\" | bc)"
+  echo
+  echo "# check frames per second"
+  echo "if (( FPS < 20 )) ; then"
+  echo
+  echo "  # notify user"
+  echo "  failmsg \"the video must have at least 20 frames per second: \$GLOBAL_SOURCEFILE\""
+  echo
+  echo "  # signalize trouble"
+  echo "  exit 1"
+  echo
+  echo "fi"
+  echo
+  echo "# manual"
+  echo "if [ \"\$RUN_MODE\" == \"MANUAL\" ] ; then"
+  echo
+  echo "  # remove old snapshots first"
+  echo "  rm -f zzz-*.png"
+  echo
+  echo "  # create stills"
+  echo "  if ! create_manual_stills ; then"
+  echo
+  echo "    # signalize trouble"
+  echo "    exit 1"
+  echo
+  echo "  fi"
+  echo
+  echo "# auto"
+  echo "elif [ \"\$RUN_MODE\" == \"AUTO\" ] ; then"
+  echo
+  echo "  # remove old snapshots first"
+  echo "  rm -f zzz-*.png"
+  echo
+  echo "  # create stills"
+  echo "  if ! create_auto_stills ; then"
+  echo
+  echo "    # signalize trouble"
+  echo "    exit 1"
+  echo
+  echo "  fi"
+  echo
+  echo "# SNAFU"
+  echo "else"
+  echo
+  echo "  # notify user"
+  echo "  failmsg \"SNAFU\""
+  echo
+  echo "  # signalize trouble"
+  echo "  exit 1"
+  echo
+  echo "fi"
+  echo
+  echo "# signalize success"
+  echo "exit 0"
+}
+
+# ----------------
+# show_tile_script
+# ----------------
+#
+# $1  final filename
+# $2  width of one single tile
+#
+function show_tile_script()
+{
+  echo "#!/bin/bash"
+  echo
+  echo "# ------------------------------------------------------------------------------"
+  echo "# settings                                                              settings"
+  echo "# ------------------------------------------------------------------------------"
+  echo "set -o errtrace  # any trap on ERR is inherited by shell functions,"
+  echo "                 #   command substitutions, and commands executed in a subshell"
+  echo "                 #   environment"
+  echo "set -o nounset   # treat unset variables and parameters other than the special"
+  echo "                 #   parameters \"@\" and \"*\" as an error when performing"
+  echo "                 #   parameter expansion"
+  echo "set -o pipefail  # the return value of a pipeline is the value of the last"
+  echo "                 #   (rightmost) command to exit with a non-zero status, or"
+  echo "                 #   zero if all commands in the pipeline exit successfully"
+  echo
+  echo "# set language"
+  echo "export LANG=\"en_US.UTF-8\""
+  echo
+  echo "# use dot as decimal separator"
+  echo "export LC_NUMERIC=\"en_US.UTF-8\""
+  echo
+  echo "# terminal colors"
+  echo "readonly    NONE=\$(tput sgr0)"
+  echo "readonly     RED=\$(tput setaf 1)"
+  echo "readonly   GREEN=\$(tput setaf 2)"
+  echo "readonly  YELLOW=\$(tput setaf 3)"
+  echo "readonly    BLUE=\$(tput setaf 4)"
+  echo "readonly MAGENTA=\$(tput setaf 5)"
+  echo "readonly    CYAN=\$(tput setaf 6)"
+  echo "readonly   WHITE=\$(tput setaf 7)"
+  echo
+  echo "# the file that holds the crop settings"
+  echo "readonly GLOBAL_SOURCEFILE=\"cropdata\""
+  echo
+  echo "# the name of the resulting file"
+  echo "readonly GLOBAL_TARGETFILE=\"$1\""
+  echo
+  echo "# width of one single tile"
+  echo "readonly GLOBAL_WIDTH=$2"
+  echo
+  echo "# borders (left, right, top, bottom)"
+  echo "readonly GLOBAL_BRDL=0"
+  echo "readonly GLOBAL_BRDR=0"
+  echo "readonly GLOBAL_BRDT=0"
+  echo "readonly GLOBAL_BRDB=0"
+  echo
+  echo "# space between rows and columns"
+  echo "readonly GLOBAL_ROWSEP=2"
+  echo "readonly GLOBAL_COLSEP=2"
+  echo
+  echo "# default crop settings"
+  echo "GLOBAL_CROPW=0"
+  echo "GLOBAL_CROPH=0"
+  echo "GLOBAL_CROPX=0"
+  echo "GLOBAL_CROPY=0"
+  echo
+  echo "# ------------------------------------------------------------------------------"
+  echo "# functions                                                            functions"
+  echo "# ------------------------------------------------------------------------------"
+  echo
+  echo "# -------"
+  echo "# failmsg"
+  echo "# -------"
+  echo "#"
+  echo "# This function prints a red colored message via stderr."
+  echo "#"
+  echo "function failmsg()"
+  echo "{"
+  echo "  # push to stderr"
+  echo "  echo -e \"\${RED}[FAIL]\${NONE} \$1\" 1>&2"
+  echo "}"
+  echo
+  echo "# -------"
+  echo "# warnmsg"
+  echo "# -------"
+  echo "#"
+  echo "# This function prints a yellow colored message via stderr."
+  echo "#"
+  echo "function warnmsg()"
+  echo "{"
+  echo "  # push to stderr"
+  echo "  echo -e \"\${YELLOW}[WARN]\${NONE} \$1\" 1>&2"
+  echo "}"
+  echo
+  echo "# -------"
+  echo "# infomsg"
+  echo "# -------"
+  echo "#"
+  echo "# This function prints a blue colored message via stderr."
+  echo "#"
+  echo "function infomsg()"
+  echo "{"
+  echo "  # push to stderr"
+  echo "  echo -e \"\${BLUE}[INFO]\${NONE} \$1\" 1>&2"
+  echo "}"
+  echo
+  echo "# -------"
+  echo "# donemsg"
+  echo "# -------"
+  echo "#"
+  echo "# This function prints a green colored message via stderr."
+  echo "#"
+  echo "function donemsg()"
+  echo "{"
+  echo "  # push to stderr"
+  echo "  echo -e \"\${GREEN}[DONE]\${NONE} \$1\" 1>&2"
+  echo "}"
+  echo
+  echo "# ------------------"
+  echo "# read_crop_settings"
+  echo "# ------------------"
+  echo "#"
+  echo "#"
+  echo "#"
+  echo "function read_crop_settings()"
+  echo "{"
+  echo "  # reset global variables"
+  echo "  GLOBAL_CROPW=0"
+  echo "  GLOBAL_CROPH=0"
+  echo "  GLOBAL_CROPX=0"
+  echo "  GLOBAL_CROPY=0"
+  echo
+  echo "  # check given filename"
+  echo "  if [ ! -f \"\$GLOBAL_SOURCEFILE\" ] ; then"
+  echo
+  echo "    # notify user"
+  echo "    failmsg \"unable to open file: \\\"\$GLOBAL_SOURCEFILE\\\"\""
+  echo
+  echo "    # signalize trouble"
+  echo "    return 1"
+  echo
+  echo "  fi"
+  echo
+  echo "  # get number of different crop settings"
+  echo "  local CNUM=\$(sed -nre \"s/^crop=.+/&/p\" \"\$GLOBAL_SOURCEFILE\" | wc -l)"
+  echo
+  echo "  # no settings found"
+  echo "  if (( CNUM == 0 )) ; then"
+  echo
+  echo "    # notify user"
+  echo "    failmsg \"no crop settings found: \$PWD\""
+  echo
+  echo "    # signalize trouble"
+  echo "    return 1"
+  echo
+  echo "  fi"
+  echo
+  echo "  # too many settings found"
+  echo "  if (( CNUM > 1 )) ; then"
+  echo
+  echo "    # notify user"
+  echo "    failmsg \"too many crop settings given: \$PWD\""
+  echo
+  echo "    # signalize trouble"
+  echo "    return 1"
+  echo
+  echo "  fi"
+  echo
+  echo "  # get first crop setting from file"
+  echo "  local CROP=\$(sed -nre \"s/^crop=.+/&/p ; T ; q\" \"\$GLOBAL_SOURCEFILE\")"
+  echo
+  echo "  # expected line format"
+  echo "  local REGEXP=\"crop=([[:digit:]]+):([[:digit:]]+):([[:digit:]]+):([[:digit:]]+)\""
+  echo
+  echo "  # set global variables"
+  echo "  GLOBAL_CROPW=\$(sed -nre \"s/\$REGEXP/\\1/p\" <<< \"\$CROP\")"
+  echo "  GLOBAL_CROPH=\$(sed -nre \"s/\$REGEXP/\\2/p\" <<< \"\$CROP\")"
+  echo "  GLOBAL_CROPX=\$(sed -nre \"s/\$REGEXP/\\3/p\" <<< \"\$CROP\")"
+  echo "  GLOBAL_CROPY=\$(sed -nre \"s/\$REGEXP/\\4/p\" <<< \"\$CROP\")"
+  echo
+  echo "  # signalize success"
+  echo "  return 0"
+  echo "}"
+  echo
+  echo "# ------------------------------------------------------------------------------"
+  echo "# commands                                                              commands"
+  echo "# ------------------------------------------------------------------------------"
+  echo
+  echo "# get crop settings from file"
+  echo "if ! read_crop_settings ; then"
+  echo
+  echo "  # signalize trouble"
+  echo "  exit 1"
+  echo
+  echo "fi"
+  echo
+  echo "# show progress"
+  echo "infomsg \"creating preview file\""
+  echo
+  echo "# create temporary directory"
+  echo "TEMPDIR=\$(mktemp --directory --suffix=\".tile\")"
+  echo
+  echo "# clean up on exit"
+  echo "trap 'rm -rf \"\$TEMPDIR\"' EXIT"
+  echo
+  echo "# merge settings"
+  echo "readonly CROP=\"\${GLOBAL_CROPW}x\${GLOBAL_CROPH}+\${GLOBAL_CROPX}+\${GLOBAL_CROPY}\""
+  echo
+  echo "# output file counter"
+  echo "FILENUMBER=0"
+  echo
+  echo "# crop and scale first 9 files in the current directory"
+  echo "find -maxdepth \"1\"                                  \\"
+  echo "     -type \"f\"                                      \\"
+  echo "     -regextype posix-extended                      \\"
+  echo "     -regex \".+\\.([Pp][Nn][Gg]|[Jj][Pp][Ee]?[Gg])\$\" \\"
+  echo "     -print0                                        \\"
+  echo "| env LC_ALL=C sort -z                              \\"
+  echo "| while read -d \$'\\0' FILENAME"
+  echo "do"
+  echo
+  echo "  # step counter"
+  echo "  (( FILENUMBER += 1 ))"
+  echo
+  echo "  # set output filename"
+  echo "  TEMPFILE=\$(printf \"%s/%d.png\" \"\$TEMPDIR\" \"\$FILENUMBER\")"
+  echo
+  echo "  # crop and scale snapshot"
+  echo "  convert \"\$FILENAME\"                    \\"
+  echo "          -colorspace \"RGB\"              \\"
+  echo "          -gravity    \"NorthWest\"        \\"
+  echo "          -crop       \"\$CROP\"            \\"
+  echo "          -filter     \"Lanczos2\"         \\"
+  echo "          -resize     \"\${GLOBAL_WIDTH}x\" \\"
+  echo "          -colorspace \"sRGB\"             \\"
+  echo "          \"PNG32:\$TEMPFILE\"              \\"
+  echo "          &>\"/dev/null\""
+  echo
+  echo "  # exit loop"
+  echo "  (( FILENUMBER == 9 )) && break"
+  echo
+  echo "done"
+  echo
+  echo "# check last file"
+  echo "if [ ! -s \"\$TEMPDIR/9.png\" ] ; then"
+  echo
+  echo "  # notify user"
+  echo "  failmsg \"less than nine images found: \$PWD\""
+  echo
+  echo "  # signalize trouble"
+  echo "  exit 1"
+  echo
+  echo "fi"
+  echo
+  echo "# get hight of one tile"
+  echo "readonly TILEH=\$(identify -format \"%h\" \"\$TEMPDIR/1.png\" 2>\"/dev/null\")"
+  echo
+  echo "# calculate size of the background image"
+  echo "readonly TOTALW=\$(bc <<< \"\$GLOBAL_BRDL + \$GLOBAL_BRDR + 2 * \$GLOBAL_COLSEP + 3 * \$GLOBAL_WIDTH\")"
+  echo "readonly TOTALH=\$(bc <<< \"\$GLOBAL_BRDT + \$GLOBAL_BRDB + 2 * \$GLOBAL_ROWSEP + 3 * \$TILEH\")"
+  echo
+  echo "# calculate tile positions"
+  echo "readonly C1=\$(bc <<< \"\$GLOBAL_BRDL + 0 * (\$GLOBAL_WIDTH + \$GLOBAL_COLSEP)\")"
+  echo "readonly C2=\$(bc <<< \"\$GLOBAL_BRDL + 1 * (\$GLOBAL_WIDTH + \$GLOBAL_COLSEP)\")"
+  echo "readonly C3=\$(bc <<< \"\$GLOBAL_BRDL + 2 * (\$GLOBAL_WIDTH + \$GLOBAL_COLSEP)\")"
+  echo "readonly R1=\$(bc <<< \"\$GLOBAL_BRDT + 0 * (\$TILEH + \$GLOBAL_ROWSEP)\")"
+  echo "readonly R2=\$(bc <<< \"\$GLOBAL_BRDT + 1 * (\$TILEH + \$GLOBAL_ROWSEP)\")"
+  echo "readonly R3=\$(bc <<< \"\$GLOBAL_BRDT + 2 * (\$TILEH + \$GLOBAL_ROWSEP)\")"
+  echo
+  echo "# create preview file"
+  echo "convert -size \"\${TOTALW}x\${TOTALH}\"                      \\"
+  echo "        \"canvas:black\"                                   \\"
+  echo "        \"\$TEMPDIR/1.png\" -geometry \"+\$C1+\$R1\" -composite \\"
+  echo "        \"\$TEMPDIR/2.png\" -geometry \"+\$C2+\$R1\" -composite \\"
+  echo "        \"\$TEMPDIR/3.png\" -geometry \"+\$C3+\$R1\" -composite \\"
+  echo "        \"\$TEMPDIR/4.png\" -geometry \"+\$C1+\$R2\" -composite \\"
+  echo "        \"\$TEMPDIR/5.png\" -geometry \"+\$C2+\$R2\" -composite \\"
+  echo "        \"\$TEMPDIR/6.png\" -geometry \"+\$C3+\$R2\" -composite \\"
+  echo "        \"\$TEMPDIR/7.png\" -geometry \"+\$C1+\$R3\" -composite \\"
+  echo "        \"\$TEMPDIR/8.png\" -geometry \"+\$C2+\$R3\" -composite \\"
+  echo "        \"\$TEMPDIR/9.png\" -geometry \"+\$C3+\$R3\" -composite \\"
+  echo "        -colorspace \"sRGB\"                               \\"
+  echo "        \"PNG32:\$GLOBAL_TARGETFILE\""
+  echo
+  echo "# show progress"
+  echo "donemsg \"preview file created: \$GLOBAL_TARGETFILE\""
+  echo
+  echo "# signalize success"
+  echo "exit 0"
+}
+
+# ------------------------------------------------------------------------------
+# options                                                                options
+# ------------------------------------------------------------------------------
+
+# set default values
+RUN_MODE="MANUAL"
+ARG_SHIFT=0
+ARG_WIDTH=320
+
+# set options to accept
+readonly KNOWN_OPTIONS=":hva:w:"
+
+# check passed options
+while getopts "$KNOWN_OPTIONS" OPTION "$@"
+do
+
+  case "$OPTION" in
+
+    # show help
+    "h") RUN_MODE="SHOW_HELP"
+         ;;
+
+    # show version
+    "v") RUN_MODE="SHOW_VERSION"
+         ;;
+
+    # set AUTO mode
+    "a") RUN_MODE="AUTO"
+         ARG_SHIFT="$OPTARG"
+         ;;
+
+    # set width
+    "w") ARG_WIDTH="$OPTARG"
+         ;;
+
+    "?") failmsg "unknown option: -$OPTARG"
+         exit 1
+         ;;
+
+    ":") failmsg "missing argument: -$OPTARG <argument>"
+         exit 1
+         ;;
+
+  esac
+
+done
+
+# get number of positional parameters
+PPNUM=$(( $# - OPTIND + 1 ))
+
+# drop all parsed options
+shift $(( OPTIND - 1 ))
+
+# ------------------------------------------------------------------------------
+# commands                                                              commands
+# ------------------------------------------------------------------------------
+
+# show help
+if [ "$RUN_MODE" == "SHOW_HELP" ] ; then
+
+  # show syntax
+  echo
+  echo "snap9 -h          show help and exit"
+  echo "snap9 -v          show version and exit"
+  echo "snap9 -a <shift>  automatic mode"
+  echo "                  <shift>: shift default snapshot positions by <shift> percent (-5 ... +5)"
+  echo "snap9 -w <width>  scale each snapshot to this width"
+  echo
+
+  # signalize success
+  exit 0
+
+fi
+
+# show version
+if [ "$RUN_MODE" == "SHOW_VERSION" ] ; then
+
+  # show syntax
+  echo "2018-05-22"
+
+  # signalize success
+  exit 0
+
+fi
+
+# check number of parameters
+if (( PPNUM != 1 )) ; then
+
+  # notify user
+  failmsg "exactly one video file needed"
+
+  # signalize trouble
+  exit 1
+
+fi
+
+# get full path of the given source file
+SOURCEFILE=$(readlink -e "$1")
+
+# check path
+if [ -z "$SOURCEFILE" ] ; then
+
+  # notify user
+  failmsg "unable to locate file: \"$SOURCEFILE\""
+
+  # signalize trouble
+  exit 1
+
+fi
+
+# set working directory
+TARGET_DIR=$(get_next_dir_name)
+
+# try to create target directory
+mkdir -p "$TARGET_DIR"
+
+# set filename of the resulting image
+PREVIEW_FILE=$(get_target_filename "$SOURCEFILE")
+
+# check filename
+if [ -z "$PREVIEW_FILE" ] ; then
+
+  # notify user
+  failmsg "unable to derive preview filename: \"$SOURCEFILE\""
+
+  # signalize trouble
+  exit 1
+
+fi
+
+# set filenames of the bash scripts
+CROP_SCRIPT="${TARGET_DIR}crop"
+SNAP_SCRIPT="${TARGET_DIR}snap"
+TILE_SCRIPT="${TARGET_DIR}tile"
+
+# create bash scripts
+show_crop_script "$SOURCEFILE"                > "$CROP_SCRIPT"
+show_snap_script "$SOURCEFILE"                > "$SNAP_SCRIPT"
+show_tile_script "$PREVIEW_FILE" "$ARG_WIDTH" > "$TILE_SCRIPT"
+
+# check script files
+if [ ! -s "$CROP_SCRIPT" ] \
+|| [ ! -s "$SNAP_SCRIPT" ] \
+|| [ ! -s "$TILE_SCRIPT" ] ; then
+
+  # notify user
+  failmsg "unable to create script files: \"$TARGET_DIR\""
+
+  # signalize trouble
+  exit 1
+
+fi
+
+# set executable flag
+chmod u+x "$CROP_SCRIPT" "$SNAP_SCRIPT" "$TILE_SCRIPT"
+
+# run scripts automatically
+if [ "$RUN_MODE" == "AUTO" ] ; then
+
+  # move down
+  cd "$TARGET_DIR"
+
+  if ! ./crop                 ; then exit 1; fi
+  if ! ./snap -a "$ARG_SHIFT" ; then exit 1; fi
+  if ! ./tile                 ; then exit 1; fi
+
+  # move resulting preview file
+  mv -ft .. "$PREVIEW_FILE"
+
+  # move up
+  cd ".."
+
+  # remove working directory
+  rm -rf "$TARGET_DIR"
+
+else
+
+  # show progress
+  donemsg "directory initialized: $TARGET_DIR"
+
+fi
+
+# signalize success
+exit 0
+
