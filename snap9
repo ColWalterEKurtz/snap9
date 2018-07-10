@@ -689,7 +689,7 @@ function show_snap_script()
   echo "  local MAXOFF=\$(bc <<< \"scale=0; \$VLENSEC / 20 - 1\")"
   echo
   echo "  # create stills"
-  echo "  for (( OFFSET=0 ; OFFSET <= MAXOFF; OFFSET++ ))"
+  echo "  for (( OFFSET=0 ; OFFSET <= MAXOFF ; OFFSET++ ))"
   echo "  do"
   echo
   echo "    # set offset each 20 seconds"
@@ -1198,11 +1198,11 @@ function show_tile_script()
   echo "# output file counter"
   echo "FILENUMBER=0"
   echo
-  echo "# crop and scale first 9 files in the current directory"
+  echo "# crop and scale first 9 stills in the current directory"
   echo "find -maxdepth \"1\"                                  \\"
   echo "     -type \"f\"                                      \\"
   echo "     -regextype posix-extended                      \\"
-  echo "     -regex \".+\\.([Pp][Nn][Gg]|[Jj][Pp][Ee]?[Gg])\$\" \\"
+  echo "     -regex \"\\./zzz[[:digit:]-]+\\.[Pp][Nn][Gg]\$\" \\"
   echo "     -print0                                        \\"
   echo "| env LC_ALL=C sort -z                              \\"
   echo "| while read -d \$'\\0' FILENAME"
@@ -1286,9 +1286,10 @@ function show_tile_script()
 RUN_MODE="MANUAL"
 ARG_SHIFT=0
 ARG_WIDTH=320
+PREVIEW_FILE=""
 
 # set options to accept
-readonly KNOWN_OPTIONS=":hva:w:"
+readonly KNOWN_OPTIONS=":hva:w:o:"
 
 # check passed options
 while getopts "$KNOWN_OPTIONS" OPTION "$@"
@@ -1311,6 +1312,10 @@ do
 
     # set width
     "w") ARG_WIDTH="$OPTARG"
+         ;;
+
+    # set output filename
+    "o") PREVIEW_FILE="$OPTARG"
          ;;
 
     "?") failmsg "unknown option: -$OPTARG"
@@ -1345,6 +1350,7 @@ if [ "$RUN_MODE" == "SHOW_HELP" ] ; then
   echo "snap9 -a <shift>  automatic mode"
   echo "                  <shift>: shift default snapshot positions by <shift> percent (-5 ... +5)"
   echo "snap9 -w <width>  scale each snapshot to this width"
+  echo "snap9 -o <name>   use <name> as resulting filename (must end with .png)"
   echo
 
   # signalize success
@@ -1355,8 +1361,8 @@ fi
 # show version
 if [ "$RUN_MODE" == "SHOW_VERSION" ] ; then
 
-  # show syntax
-  echo "2018-05-22"
+  # show current version
+  echo "2018-07-10"
 
   # signalize success
   exit 0
@@ -1394,17 +1400,22 @@ TARGET_DIR=$(get_next_dir_name)
 # try to create target directory
 mkdir -p "$TARGET_DIR"
 
-# set filename of the resulting image
-PREVIEW_FILE=$(get_target_filename "$SOURCEFILE")
-
-# check filename
+# no output filename given
 if [ -z "$PREVIEW_FILE" ] ; then
 
-  # notify user
-  failmsg "unable to derive preview filename: \"$SOURCEFILE\""
+  # set filename of the resulting image
+  PREVIEW_FILE=$(get_target_filename "$SOURCEFILE")
 
-  # signalize trouble
-  exit 1
+  # check filename
+  if [ -z "$PREVIEW_FILE" ] ; then
+
+    # notify user
+    failmsg "unable to derive preview filename: \"$SOURCEFILE\""
+
+    # signalize trouble
+    exit 1
+
+  fi
 
 fi
 
