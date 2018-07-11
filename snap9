@@ -368,6 +368,38 @@ function show_crop_script()
   echo "}"
   echo
   echo "# ------------------------------------------------------------------------------"
+  echo "# options                                                                options"
+  echo "# ------------------------------------------------------------------------------"
+  echo
+  echo "# set default value"
+  echo "VIDEOOUT=\"aa\""
+  echo
+  echo "# set options to accept"
+  echo "readonly KNOWN_OPTIONS=\":q\""
+  echo
+  echo "# check passed options"
+  echo "while getopts \"\$KNOWN_OPTIONS\" OPTION \"\$@\""
+  echo "do"
+  echo
+  echo "  case \"\$OPTION\" in"
+  echo
+  echo "    # quiet"
+  echo "    \"q\") VIDEOOUT=\"null\""
+  echo "         ;;"
+  echo
+  echo "    \"?\") failmsg \"unknown option: -\$OPTARG\""
+  echo "         exit 1"
+  echo "         ;;"
+  echo
+  echo "    \":\") failmsg \"missing argument: -\$OPTARG <argument>\""
+  echo "         exit 1"
+  echo "         ;;"
+  echo
+  echo "  esac"
+  echo
+  echo "done"
+  echo
+  echo "# ------------------------------------------------------------------------------"
   echo "# commands                                                              commands"
   echo "# ------------------------------------------------------------------------------"
   echo
@@ -419,7 +451,7 @@ function show_crop_script()
   echo "        -ss 20                                                 \\"
   echo "        -frames 120                                            \\"
   echo "        -vf \"cropdetect,framestep=5\"                           \\"
-  echo "        -vo \"aa\"                                               \\"
+  echo "        -vo \"\$VIDEOOUT\"                                        \\"
   echo "        -monitorpixelaspect \"0.5\"                              \\"
   echo "        \"\$GLOBAL_SOURCEFILE\"                                   \\"
   echo "        2>\"/dev/null\"                                          \\"
@@ -1287,9 +1319,10 @@ RUN_MODE="MANUAL"
 ARG_SHIFT=0
 ARG_WIDTH=320
 PREVIEW_FILE=""
+NO_ASCII_ART=""
 
 # set options to accept
-readonly KNOWN_OPTIONS=":hva:w:o:"
+readonly KNOWN_OPTIONS=":hva:w:o:q"
 
 # check passed options
 while getopts "$KNOWN_OPTIONS" OPTION "$@"
@@ -1316,6 +1349,10 @@ do
 
     # set output filename
     "o") PREVIEW_FILE="$OPTARG"
+         ;;
+
+    # quiet mode
+    "q") NO_ASCII_ART="-q"
          ;;
 
     "?") failmsg "unknown option: -$OPTARG"
@@ -1349,8 +1386,9 @@ if [ "$RUN_MODE" == "SHOW_HELP" ] ; then
   echo "snap9 -v          show version and exit"
   echo "snap9 -a <shift>  automatic mode"
   echo "                  <shift>: shift default snapshot positions by <shift> percent (-5 ... +5)"
-  echo "snap9 -w <width>  scale each snapshot to this width"
-  echo "snap9 -o <name>   use <name> as resulting filename (must end with .png)"
+  echo "      -w <width>  scale each snapshot to this width"
+  echo "      -o <name>   use <name> as resulting filename (must end with .png)"
+  echo "      -q          crop without showing ascii art"
   echo
 
   # signalize success
@@ -1451,9 +1489,9 @@ if [ "$RUN_MODE" == "AUTO" ] ; then
   # move down
   cd "$TARGET_DIR"
 
-  if ! ./crop                 ; then exit 1; fi
-  if ! ./snap -a "$ARG_SHIFT" ; then exit 1; fi
-  if ! ./tile                 ; then exit 1; fi
+  if ! ./crop "$NO_ASCII_ART" ; then exit 1 ; fi
+  if ! ./snap -a "$ARG_SHIFT" ; then exit 1 ; fi
+  if ! ./tile                 ; then exit 1 ; fi
 
   # move resulting preview file
   mv -ft .. "$PREVIEW_FILE"
