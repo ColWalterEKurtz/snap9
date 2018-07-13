@@ -81,6 +81,131 @@ function donemsg()
   echo -e "${GREEN}[DONE]${NONE} $1" 1>&2
 }
 
+# -------------
+# is_video_file
+# -------------
+#"
+# $1  video file
+#
+function is_video_file()
+{
+  # no regular file given
+  [ ! -f "$1" ] && return 1
+
+  # try to get MIME type
+  local MIME=$(file --brief --mime "$1" | sed -re "s|/.+||")
+
+  # no video file found
+  [ "$MIME" != "video" ] && return 1
+
+  # video file given
+  return 0
+}
+
+# ---------------
+# get_video_stats
+# ---------------
+#
+# $1  video file
+#
+function get_video_stats()
+{
+  # push all information to stdout
+  mplayer -vo "null"  \
+          -ao "null"  \
+          -frames "0" \
+          -identify   \
+          "$1"        \
+          2>"/dev/null"
+}
+
+# ---------------
+# get_video_width
+# ---------------
+#
+# $1  video file
+#
+function get_video_width()
+{
+  # get width in pixels
+  local WIDTH=$(get_video_stats "$1" | sed -nre "s/^ID_VIDEO_WIDTH=([[:digit:]]+)$/\1/p")
+
+  # no width information found
+  [ -z "$WIDTH" ] && return 1
+
+  # push width to stdout
+  printf "%d" "$WIDTH"
+
+  # signalize success
+  return 0
+}
+
+# ----------------
+# get_video_height
+# ----------------
+#
+# $1  video file
+#
+function get_video_height()
+{
+  # get height in pixels
+  local HEIGHT=$(get_video_stats "$1" | sed -nre "s/^ID_VIDEO_HEIGHT=([[:digit:]]+)$/\1/p")
+
+  # no height information found
+  [ -z "$HEIGHT" ] && return 1
+
+  # push height to stdout
+  printf "%d" "$HEIGHT"
+
+  # signalize success
+  return 0
+}
+
+# ----------------
+# get_video_length
+# ----------------
+#
+# $1  video file
+#
+function get_video_length()
+{
+  # get length in seconds (cut off decimal places)
+  local LENGTH=$(get_video_stats "$1" | sed -nre "/^ID_LENGTH=/{ s/^.+=// ; s/\.[^\.]+$// ; p }")
+
+  # no length information found
+  [ -z "$LENGTH" ] && return 1
+
+  # push length to stdout
+  printf "%d" "$LENGTH"
+
+  # signalize success
+  return 0
+}
+
+# -------------
+# get_video_fps
+# -------------
+#
+# $1  video file
+#
+function get_video_fps()
+{
+  # get frames per second
+  local FPS=$(get_video_stats "$1"                   \
+              | sed -nre "s/^ID_VIDEO_FPS=(.+)/\1/p" \
+              | sed -re "s/0+$//"                    \
+              | sed -re "s/\.$//"                    )
+
+  # no frames per second information found
+  [ -z "$FPS" ] && return 1
+
+  # push frames per second to stdout
+  printf "%s" "$FPS"
+
+  # signalize success
+  return 0
+}
+
 # -----------------
 # get_next_dir_name
 # -----------------
@@ -153,6 +278,8 @@ function get_target_filename()
 # ----------------
 #
 # $1  video file
+# $2  video width
+# $3  video height
 #
 function show_crop_script()
 {
@@ -187,8 +314,10 @@ function show_crop_script()
   echo "readonly    CYAN=\$(tput setaf 6)"
   echo "readonly   WHITE=\$(tput setaf 7)"
   echo
-  echo "# the video file to operate"
-  echo "readonly GLOBAL_SOURCEFILE=\"$1\""
+  echo "# video information"
+  echo "readonly GLOBAL_SOURCE_FILE=\"$1\""
+  echo "readonly GLOBAL_VIDEO_WIDTH=\"$2\""
+  echo "readonly GLOBAL_VIDEO_HEIGHT=\"$3\""
   echo
   echo "# the name of the resulting file"
   echo "readonly GLOBAT_TARGETFILE=\"cropdata\""
@@ -245,128 +374,6 @@ function show_crop_script()
   echo "  echo -e \"\${GREEN}[DONE]\${NONE} \$1\" 1>&2"
   echo "}"
   echo
-  echo "# ---------------"
-  echo "# get_video_stats"
-  echo "# ---------------"
-  echo "#"
-  echo "# \$1  video file"
-  echo "#"
-  echo "function get_video_stats()"
-  echo "{"
-  echo "  # push all information to stdout"
-  echo "  mplayer -vo \"null\"  \\"
-  echo "          -ao \"null\"  \\"
-  echo "          -frames \"0\" \\"
-  echo "          -identify   \\"
-  echo "          \"\$1\"        \\"
-  echo "          2>\"/dev/null\""
-  echo "}"
-  echo
-  echo "# ----------------"
-  echo "# get_video_length"
-  echo "# ----------------"
-  echo "#"
-  echo "# \$1  video file"
-  echo "#"
-  echo "function get_video_length()"
-  echo "{"
-  echo "  # get length in seconds (cut off decimal places)"
-  echo "  local LENGTH=\$(get_video_stats \"\$1\" | sed -nre \"/^ID_LENGTH=/{ s/^.+=// ; s/\\.[^\\.]+\$// ; p }\")"
-  echo
-  echo "  # no length information found"
-  echo "  [ -z \"\$LENGTH\" ] && return 1"
-  echo
-  echo "  # push length to stdout"
-  echo "  printf \"%d\" \"\$LENGTH\""
-  echo
-  echo "  # signalize success"
-  echo "  return 0"
-  echo "}"
-  echo
-  echo "# ---------------"
-  echo "# get_video_width"
-  echo "# ---------------"
-  echo "#"
-  echo "# \$1  video file"
-  echo "#"
-  echo "function get_video_width()"
-  echo "{"
-  echo "  # get width in pixels"
-  echo "  local WIDTH=\$(get_video_stats \"\$1\" | sed -nre \"s/^ID_VIDEO_WIDTH=([[:digit:]]+)\$/\\1/p\")"
-  echo
-  echo "  # no width information found"
-  echo "  [ -z \"\$WIDTH\" ] && return 1"
-  echo
-  echo "  # push width to stdout"
-  echo "  printf \"%d\" \"\$WIDTH\""
-  echo
-  echo "  # signalize success"
-  echo "  return 0"
-  echo "}"
-  echo
-  echo "# ----------------"
-  echo "# get_video_height"
-  echo "# ----------------"
-  echo "#"
-  echo "# \$1  video file"
-  echo "#"
-  echo "function get_video_height()"
-  echo "{"
-  echo "  # get height in pixels"
-  echo "  local HEIGHT=\$(get_video_stats \"\$1\" | sed -nre \"s/^ID_VIDEO_HEIGHT=([[:digit:]]+)\$/\\1/p\")"
-  echo
-  echo "  # no height information found"
-  echo "  [ -z \"\$HEIGHT\" ] && return 1"
-  echo
-  echo "  # push height to stdout"
-  echo "  printf \"%d\" \"\$HEIGHT\""
-  echo
-  echo "  # signalize success"
-  echo "  return 0"
-  echo "}"
-  echo
-  echo "# -------------"
-  echo "# get_video_fps"
-  echo "# -------------"
-  echo "#"
-  echo "# \$1  video file"
-  echo "#"
-  echo "function get_video_fps()"
-  echo "{"
-  echo "  # get frames per second"
-  echo "  local FPS=\$(get_video_stats \"\$1\"                   \\"
-  echo "              | sed -nre \"s/^ID_VIDEO_FPS=(.+)/\\1/p\" \\"
-  echo "              | sed -re \"s/0+\$//\"                    \\"
-  echo "              | sed -re \"s/\\.\$//\"                    )"
-  echo
-  echo "  # no frames per second information found"
-  echo "  [ -z \"\$FPS\" ] && return 1"
-  echo
-  echo "  # push frames per second to stdout"
-  echo "  printf \"%s\" \"\$FPS\""
-  echo
-  echo "  # signalize success"
-  echo "  return 0"
-  echo "}"
-  echo
-  echo "# -------------"
-  echo "# is_video_file"
-  echo "# -------------"
-  echo "#"
-  echo "# \$1  video file"
-  echo "#"
-  echo "function is_video_file()"
-  echo "{"
-  echo "  # no regular file given"
-  echo "  [ ! -f \"\$1\" ] && return 1"
-  echo
-  echo "  # try to get video width"
-  echo "  get_video_width \"\$1\" > \"/dev/null\" || return 1"
-  echo
-  echo "  # video file given"
-  echo "  return 0"
-  echo "}"
-  echo
   echo "# ------------------------------------------------------------------------------"
   echo "# options                                                                options"
   echo "# ------------------------------------------------------------------------------"
@@ -403,45 +410,6 @@ function show_crop_script()
   echo "# commands                                                              commands"
   echo "# ------------------------------------------------------------------------------"
   echo
-  echo "# check format"
-  echo "if ! is_video_file \"\$GLOBAL_SOURCEFILE\" ; then"
-  echo
-  echo "  # notify user"
-  echo "  failmsg \"no video file given: \\\"\$GLOBAL_SOURCEFILE\\\"\""
-  echo
-  echo "  # signalize trouble"
-  echo "  exit 1"
-  echo
-  echo "fi"
-  echo
-  echo "# get video length in seconds"
-  echo "LENGTH=\$(get_video_length \"\$GLOBAL_SOURCEFILE\")"
-  echo
-  echo "# check video length"
-  echo "if (( LENGTH < 60 )) ; then"
-  echo
-  echo "  # notify user"
-  echo "  failmsg \"the video must be at least 60 seconds long: \$GLOBAL_SOURCEFILE\""
-  echo
-  echo "  # signalize trouble"
-  echo "  exit 1"
-  echo
-  echo "fi"
-  echo
-  echo "# get number of frames per second (cut off decimal places)"
-  echo "FPS=\$(get_video_fps \"\$GLOBAL_SOURCEFILE\" | sed -nre \"s|.+|scale=0; & / 1;\\n|p\" | bc)"
-  echo
-  echo "# check frames per second"
-  echo "if (( FPS < 20 )) ; then"
-  echo
-  echo "  # notify user"
-  echo "  failmsg \"the video must have at least 20 frames per second: \$GLOBAL_SOURCEFILE\""
-  echo
-  echo "  # signalize trouble"
-  echo "  exit 1"
-  echo
-  echo "fi"
-  echo
   echo "# reset target file"
   echo "rm -f \"\$GLOBAT_TARGETFILE\""
   echo
@@ -453,7 +421,7 @@ function show_crop_script()
   echo "        -vf \"cropdetect,framestep=5\"                           \\"
   echo "        -vo \"\$VIDEOOUT\"                                        \\"
   echo "        -monitorpixelaspect \"0.5\"                              \\"
-  echo "        \"\$GLOBAL_SOURCEFILE\"                                   \\"
+  echo "        \"\$GLOBAL_SOURCE_FILE\"                                  \\"
   echo "        2>\"/dev/null\"                                          \\"
   echo "| sed -nre \"s/^\\[CROP\\].+\\(-vf (crop=[[:digit:]:]+)\\)\\.\$/\\1/p\" \\"
   echo "| sort                                                         \\"
@@ -464,14 +432,10 @@ function show_crop_script()
   echo "if [ ! -s \"\$GLOBAT_TARGETFILE\" ] ; then"
   echo
   echo "  # notify user"
-  echo "  warnmsg \"unable to get crop settings: \$GLOBAL_SOURCEFILE\""
-  echo
-  echo "  # get total width and height"
-  echo "   WTOTAL=\$(get_video_width \"\$GLOBAL_SOURCEFILE\")"
-  echo "   HTOTAL=\$(get_video_height \"\$GLOBAL_SOURCEFILE\")"
+  echo "  warnmsg \"unable to get crop settings: \$GLOBAL_SOURCE_FILE\""
   echo
   echo "  # create default crop file"
-  echo "  echo \"crop=\$WTOTAL:\$HTOTAL:0:0\" > \"\$CROPFILE\""
+  echo "  echo \"crop=\$GLOBAL_VIDEO_WIDTH:\$GLOBAL_VIDEO_HEIGHT:0:0\" > \"\$CROPFILE\""
   echo
   echo "fi"
   echo
@@ -482,7 +446,7 @@ function show_crop_script()
   echo "if (( CNUM > 1 )) ; then"
   echo
   echo "  # notify user"
-  echo "  warnmsg \"too many crop settings found: \$GLOBAL_SOURCEFILE\""
+  echo "  warnmsg \"too many crop settings found: \$GLOBAL_SOURCE_FILE\""
   echo
   echo "fi"
   echo
@@ -494,7 +458,8 @@ function show_crop_script()
 # show_snap_script
 # ----------------
 #
-# $1  video file
+# $1  video filename
+# $2  video length (in seconds)
 #
 function show_snap_script()
 {
@@ -529,8 +494,9 @@ function show_snap_script()
   echo "readonly    CYAN=\$(tput setaf 6)"
   echo "readonly   WHITE=\$(tput setaf 7)"
   echo
-  echo "# the video file to operate"
-  echo "readonly GLOBAL_SOURCEFILE=\"$1\""
+  echo "# video information"
+  echo "readonly GLOBAL_SOURCE_FILE=\"$1\""
+  echo "readonly GLOBAL_VIDEO_LENGTH=\"$2\""
   echo
   echo "# ------------------------------------------------------------------------------"
   echo "# functions                                                            functions"
@@ -584,138 +550,18 @@ function show_snap_script()
   echo "  echo -e \"\${GREEN}[DONE]\${NONE} \$1\" 1>&2"
   echo "}"
   echo
-  echo "# ---------------"
-  echo "# get_video_stats"
-  echo "# ---------------"
-  echo "#"
-  echo "# \$1  video file"
-  echo "#"
-  echo "function get_video_stats()"
-  echo "{"
-  echo "  # push all information to stdout"
-  echo "  mplayer -vo \"null\"  \\"
-  echo "          -ao \"null\"  \\"
-  echo "          -frames \"0\" \\"
-  echo "          -identify   \\"
-  echo "          \"\$1\"        \\"
-  echo "          2>\"/dev/null\""
-  echo "}"
-  echo
-  echo "# ----------------"
-  echo "# get_video_length"
-  echo "# ----------------"
-  echo "#"
-  echo "# \$1  video file"
-  echo "#"
-  echo "function get_video_length()"
-  echo "{"
-  echo "  # get length in seconds (cut off decimal places)"
-  echo "  local LENGTH=\$(get_video_stats \"\$1\" | sed -nre \"/^ID_LENGTH=/{ s/^.+=// ; s/\\.[^\\.]+\$// ; p }\")"
-  echo
-  echo "  # no length information found"
-  echo "  [ -z \"\$LENGTH\" ] && return 1"
-  echo
-  echo "  # push length to stdout"
-  echo "  printf \"%d\" \"\$LENGTH\""
-  echo
-  echo "  # signalize success"
-  echo "  return 0"
-  echo "}"
-  echo
-  echo "# ---------------"
-  echo "# get_video_width"
-  echo "# ---------------"
-  echo "#"
-  echo "# \$1  video file"
-  echo "#"
-  echo "function get_video_width()"
-  echo "{"
-  echo "  # get width in pixels"
-  echo "  local WIDTH=\$(get_video_stats \"\$1\" | sed -nre \"s/^ID_VIDEO_WIDTH=([[:digit:]]+)\$/\\1/p\")"
-  echo
-  echo "  # no width information found"
-  echo "  [ -z \"\$WIDTH\" ] && return 1"
-  echo
-  echo "  # push width to stdout"
-  echo "  printf \"%d\" \"\$WIDTH\""
-  echo
-  echo "  # signalize success"
-  echo "  return 0"
-  echo "}"
-  echo
-  echo "# ----------------"
-  echo "# get_video_height"
-  echo "# ----------------"
-  echo "#"
-  echo "# \$1  video file"
-  echo "#"
-  echo "function get_video_height()"
-  echo "{"
-  echo "  # get height in pixels"
-  echo "  local HEIGHT=\$(get_video_stats \"\$1\" | sed -nre \"s/^ID_VIDEO_HEIGHT=([[:digit:]]+)\$/\\1/p\")"
-  echo
-  echo "  # no height information found"
-  echo "  [ -z \"\$HEIGHT\" ] && return 1"
-  echo
-  echo "  # push height to stdout"
-  echo "  printf \"%d\" \"\$HEIGHT\""
-  echo
-  echo "  # signalize success"
-  echo "  return 0"
-  echo "}"
-  echo
-  echo "# -------------"
-  echo "# get_video_fps"
-  echo "# -------------"
-  echo "#"
-  echo "# \$1  video file"
-  echo "#"
-  echo "function get_video_fps()"
-  echo "{"
-  echo "  # get frames per second"
-  echo "  local FPS=\$(get_video_stats \"\$1\"                   \\"
-  echo "              | sed -nre \"s/^ID_VIDEO_FPS=(.+)/\\1/p\" \\"
-  echo "              | sed -re \"s/0+\$//\"                    \\"
-  echo "              | sed -re \"s/\\.\$//\"                    )"
-  echo
-  echo "  # no frames per second information found"
-  echo "  [ -z \"\$FPS\" ] && return 1"
-  echo
-  echo "  # push frames per second to stdout"
-  echo "  printf \"%s\" \"\$FPS\""
-  echo
-  echo "  # signalize success"
-  echo "  return 0"
-  echo "}"
-  echo
-  echo "# -------------"
-  echo "# is_video_file"
-  echo "# -------------"
-  echo "#"
-  echo "# \$1  video file"
-  echo "#"
-  echo "function is_video_file()"
-  echo "{"
-  echo "  # no regular file given"
-  echo "  [ ! -f \"\$1\" ] && return 1"
-  echo
-  echo "  # try to get video width"
-  echo "  get_video_width \"\$1\" > \"/dev/null\" || return 1"
-  echo
-  echo "  # video file given"
-  echo "  return 0"
-  echo "}"
-  echo
   echo "# --------------------"
   echo "# create_manual_stills"
   echo "# --------------------"
   echo "#"
-  echo "#"
+  echo "# \$1  video filename"
+  echo "# \$2  video length (in seconds)"
   echo "#"
   echo "function create_manual_stills()"
   echo "{"
-  echo "  # get video length in seconds"
-  echo "  local VLENSEC=\$(get_video_length \"\$GLOBAL_SOURCEFILE\")"
+  echo "  # rename positional parameters"
+  echo "  local FILENAME=\"\$1\""
+  echo "  local VLENSEC=\"\$2\""
   echo
   echo "  # calculate maximum offset (20 second steps)"
   echo "  local MAXOFF=\$(bc <<< \"scale=0; \$VLENSEC / 20 - 1\")"
@@ -728,13 +574,13 @@ function show_snap_script()
   echo "    local STARTSEC=\$(bc <<< \"\$OFFSET * 20\")"
   echo
   echo "    # create 3 stills with a gap of 100 frames at this position"
-  echo "    mplayer -benchmark           \\"
-  echo "            -nosound             \\"
-  echo "            -ss \"\$STARTSEC\"      \\"
-  echo "            -frames 3            \\"
-  echo "            -vf \"framestep=100\"  \\"
-  echo "            -vo \"png:z=9\"        \\"
-  echo "            \"\$GLOBAL_SOURCEFILE\" \\"
+  echo "    mplayer -benchmark          \\"
+  echo "            -nosound            \\"
+  echo "            -ss \"\$STARTSEC\"     \\"
+  echo "            -frames 3           \\"
+  echo "            -vf \"framestep=100\" \\"
+  echo "            -vo \"png:z=9\"       \\"
+  echo "            \"\$FILENAME\"         \\"
   echo "            &>\"/dev/null\""
   echo
   echo "    # old filenames (mplayer output)"
@@ -746,7 +592,7 @@ function show_snap_script()
   echo "    if [ ! -s \"\$OLD1\" ] || [ ! -s \"\$OLD2\" ] || [ ! -s \"\$OLD3\" ] ; then"
   echo
   echo "      # notify user"
-  echo "      warnmsg \"unable to create snapshot from \$GLOBAL_SOURCEFILE at \$STARTSEC sec\""
+  echo "      warnmsg \"unable to create snapshot from \$FILENAME at \$STARTSEC sec\""
   echo
   echo "      # next cycle"
   echo "      continue"
@@ -805,26 +651,30 @@ function show_snap_script()
   echo "# create_auto_stills"
   echo "# ------------------"
   echo "#"
-  echo "#"
+  echo "# \$1  video filename"
+  echo "# \$2  video length"
+  echo "# \$3  percentual shift"
   echo "#"
   echo "function create_auto_stills()"
   echo "{"
+  echo "  # rename positional parameters"
+  echo "  local FILENAME=\"\$1\""
+  echo "  local VLENSEC=\"\$2\""
+  echo "  local PCSHIFT=\"\$3\""
+  echo
   echo "  # check shift limits"
-  echo "  local INSIDE=\$(bc <<< \"r = 0; if (\$ARG_SHIFT < -5) { r = 1 }; if (\$ARG_SHIFT > 5) { r = 1 }; r\")"
+  echo "  local INSIDE=\$(bc <<< \"r = 0; if (\$PCSHIFT < -5) { r = 1 }; if (\$PCSHIFT > 5) { r = 1 }; r\")"
   echo
   echo "  # check flag"
   echo "  if (( INSIDE == 1 )) ; then"
   echo
   echo "    # notify user"
-  echo "    failmsg \"shift out of limits [-5.0; 5.0]: \$ARG_SHIFT\""
+  echo "    failmsg \"shift out of limits [-5.0; 5.0]: \$PCSHIFT\""
   echo
   echo "    # signalize trouble"
   echo "    return 1"
   echo
   echo "  fi"
-  echo
-  echo "  # get video length in seconds"
-  echo "  local VLENSEC=\$(get_video_length \"\$GLOBAL_SOURCEFILE\")"
   echo
   echo "  # snapshot positions in percent (9 steps needed)"
   echo "  local readonly STEPS=\"5 10 15 40 50 60 85 90 95\""
@@ -834,15 +684,15 @@ function show_snap_script()
   echo "  do"
   echo
   echo "    # set percentual offset"
-  echo "    local STARTSEC=\$(ymxb \"(\$STEP + \$ARG_SHIFT)\" 0 0 100 \"\$VLENSEC\")"
+  echo "    local STARTSEC=\$(ymxb \"(\$STEP + \$PCSHIFT)\" 0 0 100 \"\$VLENSEC\")"
   echo
   echo "    # create 1 still at this position"
-  echo "    mplayer -benchmark           \\"
-  echo "            -nosound             \\"
-  echo "            -ss \"\$STARTSEC\"      \\"
-  echo "            -frames 1            \\"
-  echo "            -vo \"png:z=9\"        \\"
-  echo "            \"\$GLOBAL_SOURCEFILE\" \\"
+  echo "    mplayer -benchmark      \\"
+  echo "            -nosound        \\"
+  echo "            -ss \"\$STARTSEC\" \\"
+  echo "            -frames 1       \\"
+  echo "            -vo \"png:z=9\"   \\"
+  echo "            \"\$FILENAME\"     \\"
   echo "            &>\"/dev/null\""
   echo
   echo "    # old filename (mplayer output)"
@@ -852,7 +702,7 @@ function show_snap_script()
   echo "    if [ ! -s \"\$OLD1\" ] ; then"
   echo
   echo "      # notify user"
-  echo "      warnmsg \"unable to create snapshot from \$GLOBAL_SOURCEFILE at \$STARTSEC sec\""
+  echo "      warnmsg \"unable to create snapshot from \$FILENAME at \$STARTSEC sec\""
   echo
   echo "      # next cycle"
   echo "      continue"
@@ -938,45 +788,6 @@ function show_snap_script()
   echo
   echo "fi"
   echo
-  echo "# check format"
-  echo "if ! is_video_file \"\$GLOBAL_SOURCEFILE\" ; then"
-  echo
-  echo "  # notify user"
-  echo "  failmsg \"no video file given: \\\"\$GLOBAL_SOURCEFILE\\\"\""
-  echo
-  echo "  # signalize trouble"
-  echo "  exit 1"
-  echo
-  echo "fi"
-  echo
-  echo "# get video length in seconds"
-  echo "LENGTH=\$(get_video_length \"\$GLOBAL_SOURCEFILE\")"
-  echo
-  echo "# check video length"
-  echo "if (( LENGTH < 60 )) ; then"
-  echo
-  echo "  # notify user"
-  echo "  failmsg \"the video must be at least 60 seconds long: \$GLOBAL_SOURCEFILE\""
-  echo
-  echo "  # signalize trouble"
-  echo "  exit 1"
-  echo
-  echo "fi"
-  echo
-  echo "# get number of frames per second (cut off decimal places)"
-  echo "FPS=\$(get_video_fps \"\$GLOBAL_SOURCEFILE\" | sed -nre \"s|.+|scale=0; & / 1;\\n|p\" | bc)"
-  echo
-  echo "# check frames per second"
-  echo "if (( FPS < 20 )) ; then"
-  echo
-  echo "  # notify user"
-  echo "  failmsg \"the video must have at least 20 frames per second: \$GLOBAL_SOURCEFILE\""
-  echo
-  echo "  # signalize trouble"
-  echo "  exit 1"
-  echo
-  echo "fi"
-  echo
   echo "# manual"
   echo "if [ \"\$RUN_MODE\" == \"MANUAL\" ] ; then"
   echo
@@ -984,7 +795,7 @@ function show_snap_script()
   echo "  rm -f zzz-*.png"
   echo
   echo "  # create stills"
-  echo "  if ! create_manual_stills ; then"
+  echo "  if ! create_manual_stills \"\$GLOBAL_SOURCE_FILE\" \"\$GLOBAL_VIDEO_LENGTH\" ; then"
   echo
   echo "    # signalize trouble"
   echo "    exit 1"
@@ -998,7 +809,7 @@ function show_snap_script()
   echo "  rm -f zzz-*.png"
   echo
   echo "  # create stills"
-  echo "  if ! create_auto_stills ; then"
+  echo "  if ! create_auto_stills \"\$GLOBAL_SOURCE_FILE\" \"\$GLOBAL_VIDEO_LENGTH\" \"\$ARG_SHIFT\" ; then"
   echo
   echo "    # signalize trouble"
   echo "    exit 1"
@@ -1061,10 +872,10 @@ function show_tile_script()
   echo "readonly   WHITE=\$(tput setaf 7)"
   echo
   echo "# the file that holds the crop settings"
-  echo "readonly GLOBAL_SOURCEFILE=\"cropdata\""
+  echo "readonly GLOBAL_SOURCE_FILE=\"cropdata\""
   echo
   echo "# the name of the resulting file"
-  echo "readonly GLOBAL_TARGETFILE=\"$1\""
+  echo "readonly GLOBAL_TARGET_FILE=\"$1\""
   echo
   echo "# width of one single tile"
   echo "readonly GLOBAL_WIDTH=$2"
@@ -1152,10 +963,10 @@ function show_tile_script()
   echo "  GLOBAL_CROPY=0"
   echo
   echo "  # check given filename"
-  echo "  if [ ! -f \"\$GLOBAL_SOURCEFILE\" ] ; then"
+  echo "  if [ ! -f \"\$GLOBAL_SOURCE_FILE\" ] ; then"
   echo
   echo "    # notify user"
-  echo "    failmsg \"unable to open file: \\\"\$GLOBAL_SOURCEFILE\\\"\""
+  echo "    failmsg \"unable to open file: \\\"\$GLOBAL_SOURCE_FILE\\\"\""
   echo
   echo "    # signalize trouble"
   echo "    return 1"
@@ -1163,7 +974,7 @@ function show_tile_script()
   echo "  fi"
   echo
   echo "  # get number of different crop settings"
-  echo "  local CNUM=\$(sed -nre \"s/^crop=.+/&/p\" \"\$GLOBAL_SOURCEFILE\" | wc -l)"
+  echo "  local CNUM=\$(sed -nre \"s/^crop=.+/&/p\" \"\$GLOBAL_SOURCE_FILE\" | wc -l)"
   echo
   echo "  # no settings found"
   echo "  if (( CNUM == 0 )) ; then"
@@ -1188,7 +999,7 @@ function show_tile_script()
   echo "  fi"
   echo
   echo "  # get first crop setting from file"
-  echo "  local CROP=\$(sed -nre \"s/^crop=.+/&/p ; T ; q\" \"\$GLOBAL_SOURCEFILE\")"
+  echo "  local CROP=\$(sed -nre \"s/^crop=.+/&/p ; T ; q\" \"\$GLOBAL_SOURCE_FILE\")"
   echo
   echo "  # expected line format"
   echo "  local REGEXP=\"crop=([[:digit:]]+):([[:digit:]]+):([[:digit:]]+):([[:digit:]]+)\""
@@ -1301,7 +1112,7 @@ function show_tile_script()
   echo "        \"\$TEMPDIR/8.png\" -geometry \"+\$C2+\$R3\" -composite \\"
   echo "        \"\$TEMPDIR/9.png\" -geometry \"+\$C3+\$R3\" -composite \\"
   echo "        -colorspace \"sRGB\"                               \\"
-  echo "        \"PNG32:\$GLOBAL_TARGETFILE\""
+  echo "        \"PNG32:\$GLOBAL_TARGET_FILE\""
   echo
   echo "# show progress"
   echo "donemsg \"preview file created: \$GLOBAL_TARGETFILE\""
@@ -1432,11 +1243,86 @@ if [ -z "$SOURCEFILE" ] ; then
 
 fi
 
-# set working directory
-TARGET_DIR=$(get_next_dir_name)
+# check MIME type
+if ! is_video_file "$1" ; then
 
-# try to create target directory
-mkdir -p "$TARGET_DIR"
+  # notify user
+  failmsg "no video file given: \"$SOURCEFILE\""
+
+  # signalize trouble
+  exit 1
+
+fi
+
+# get length in seconds
+VIDEO_LENGTH=$(get_video_length "$SOURCEFILE")
+
+# check minimum length
+if (( VIDEO_LENGTH < 60 )) ; then
+
+  # notify user
+  failmsg "video must be at least 60 seconds long: \"$SOURCEFILE\""
+
+  # signalize trouble
+  exit 1
+
+fi
+
+# get frames per second
+VIDEO_FPS=$(get_video_fps "$SOURCEFILE")
+
+# check minimum frames per second
+if (( VIDEO_FPS < 20 )) ; then
+
+  # notify user
+  failmsg "the video must have at least 20 frames per second: \"$SOURCEFILE\""
+
+  # signalize trouble
+  exit 1
+
+fi
+
+# get video width
+VIDEO_WIDTH=$(get_video_width "$SOURCEFILE")
+
+# check width
+if [ -z "$VIDEO_WIDTH" ] ; then
+
+  # notify user
+  failmsg "unable to get video width: \"$SOURCEFILE\""
+
+  # signalize trouble
+  exit 1
+
+fi
+
+# get video height
+VIDEO_HEIGHT=$(get_video_height "$SOURCEFILE")
+
+# check height
+if [ -z "$VIDEO_HEIGHT" ] ; then
+
+  # notify user
+  failmsg "unable to get video height: \"$SOURCEFILE\""
+
+  # signalize trouble
+  exit 1
+
+fi
+
+# get video length
+VIDEO_LENGTH=$(get_video_length "$SOURCEFILE")
+
+# check length
+if [ -z "$VIDEO_LENGTH" ] ; then
+
+  # notify user
+  failmsg "unable to get video length: \"$SOURCEFILE\""
+
+  # signalize trouble
+  exit 1
+
+fi
 
 # no output filename given
 if [ -z "$PREVIEW_FILE" ] ; then
@@ -1457,15 +1343,43 @@ if [ -z "$PREVIEW_FILE" ] ; then
 
 fi
 
+# set working directory
+TARGET_DIR=$(get_next_dir_name)
+
+# try to create target directory
+mkdir -p "$TARGET_DIR"
+
+# check if target directory has been created
+if [ ! -d "$TARGET_DIR" ] ; then
+
+  # notify user
+  failmsg "unable to create directory: \"$TARGET_DIR\""
+
+  # signatize trouble
+  exit 1
+
+fi
+
 # set filenames of the bash scripts
 CROP_SCRIPT="${TARGET_DIR}crop"
 SNAP_SCRIPT="${TARGET_DIR}snap"
 TILE_SCRIPT="${TARGET_DIR}tile"
 
-# create bash scripts
-show_crop_script "$SOURCEFILE"                > "$CROP_SCRIPT"
-show_snap_script "$SOURCEFILE"                > "$SNAP_SCRIPT"
-show_tile_script "$PREVIEW_FILE" "$ARG_WIDTH" > "$TILE_SCRIPT"
+# create bash script
+show_crop_script "$SOURCEFILE"   \
+                 "$VIDEO_WIDTH"  \
+                 "$VIDEO_HEIGHT" \
+                 > "$CROP_SCRIPT"
+
+# create bash script
+show_snap_script "$SOURCEFILE"   \
+                 "$VIDEO_LENGTH" \
+                 > "$SNAP_SCRIPT"
+
+# create bash script
+show_tile_script "$PREVIEW_FILE" \
+                 "$ARG_WIDTH"    \
+                 > "$TILE_SCRIPT"
 
 # check script files
 if [ ! -s "$CROP_SCRIPT" ] \
@@ -1474,6 +1388,9 @@ if [ ! -s "$CROP_SCRIPT" ] \
 
   # notify user
   failmsg "unable to create script files: \"$TARGET_DIR\""
+
+  # remove entire directory
+  rm -rf "$TARGET_DIR"
 
   # signalize trouble
   exit 1
@@ -1499,7 +1416,7 @@ if [ "$RUN_MODE" == "AUTO" ] ; then
   # move up
   cd ".."
 
-  # remove working directory
+  # remove temporary directory
   rm -rf "$TARGET_DIR"
 
 else
