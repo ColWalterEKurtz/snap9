@@ -450,6 +450,7 @@ function show_crop_script()
   echo
   echo "  # notify user"
   echo "  warnmsg \"too many crop settings found: \$GLOBAL_SOURCE_FILE\""
+  echo "  warnmsg \"operate your video manually: \$PWD\""
   echo
   echo "  # signalize trouble"
   echo "  exit 1"
