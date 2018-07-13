@@ -320,7 +320,7 @@ function show_crop_script()
   echo "readonly GLOBAL_VIDEO_HEIGHT=\"$3\""
   echo
   echo "# the name of the resulting file"
-  echo "readonly GLOBAT_TARGETFILE=\"cropdata\""
+  echo "readonly GLOBAL_TARGET_FILE=\"cropsettings\""
   echo
   echo "# ------------------------------------------------------------------------------"
   echo "# functions                                                            functions"
@@ -410,8 +410,11 @@ function show_crop_script()
   echo "# commands                                                              commands"
   echo "# ------------------------------------------------------------------------------"
   echo
+  echo "# show progress"
+  echo "infomsg \"detecting crop settings: \$GLOBAL_SOURCE_FILE\""
+  echo
   echo "# reset target file"
-  echo "rm -f \"\$GLOBAT_TARGETFILE\""
+  echo "rm -f \"\$GLOBAL_TARGET_FILE\""
   echo
   echo "# find crop settings (from 20 to at most 50 seconds)"
   echo "mplayer -benchmark                                             \\"
@@ -426,10 +429,10 @@ function show_crop_script()
   echo "| sed -nre \"s/^\\[CROP\\].+\\(-vf (crop=[[:digit:]:]+)\\)\\.\$/\\1/p\" \\"
   echo "| sort                                                         \\"
   echo "| uniq                                                         \\"
-  echo "> \"\$GLOBAT_TARGETFILE\""
+  echo "> \"\$GLOBAL_TARGET_FILE\""
   echo
   echo "# empty crop file"
-  echo "if [ ! -s \"\$GLOBAT_TARGETFILE\" ] ; then"
+  echo "if [ ! -s \"\$GLOBAL_TARGET_FILE\" ] ; then"
   echo
   echo "  # notify user"
   echo "  warnmsg \"unable to get crop settings: \$GLOBAL_SOURCE_FILE\""
@@ -440,7 +443,7 @@ function show_crop_script()
   echo "fi"
   echo
   echo "# get number of different crop settings"
-  echo "CNUM=\$(sed -nre \"s/^crop=.+/&/p\" \"\$GLOBAT_TARGETFILE\" | wc -l)"
+  echo "CNUM=\$(sed -nre \"s/^crop=.+/&/p\" \"\$GLOBAL_TARGET_FILE\" | wc -l)"
   echo
   echo "# too many settings found"
   echo "if (( CNUM > 1 )) ; then"
@@ -448,10 +451,17 @@ function show_crop_script()
   echo "  # notify user"
   echo "  warnmsg \"too many crop settings found: \$GLOBAL_SOURCE_FILE\""
   echo
+  echo "  # signalize trouble"
+  echo "  return 1"
+  echo
   echo "fi"
+  echo
+  echo "# show result"
+  echo "donemsg \"crop settings found: \$GLOBAL_SOURCE_FILE\""
   echo
   echo "# signalize success"
   echo "exit 0"
+  echo
 }
 
 # ----------------
@@ -872,7 +882,7 @@ function show_tile_script()
   echo "readonly   WHITE=\$(tput setaf 7)"
   echo
   echo "# the file that holds the crop settings"
-  echo "readonly GLOBAL_SOURCE_FILE=\"cropdata\""
+  echo "readonly GLOBAL_SOURCE_FILE=\"cropsettings\""
   echo
   echo "# the name of the resulting file"
   echo "readonly GLOBAL_TARGET_FILE=\"$1\""
@@ -1042,12 +1052,12 @@ function show_tile_script()
   echo "FILENUMBER=0"
   echo
   echo "# crop and scale first 9 stills in the current directory"
-  echo "find -maxdepth \"1\"                                  \\"
-  echo "     -type \"f\"                                      \\"
-  echo "     -regextype posix-extended                      \\"
+  echo "find -maxdepth \"1\"                               \\"
+  echo "     -type \"f\"                                   \\"
+  echo "     -regextype posix-extended                   \\"
   echo "     -regex \"\\./zzz[[:digit:]-]+\\.[Pp][Nn][Gg]\$\" \\"
-  echo "     -print0                                        \\"
-  echo "| env LC_ALL=C sort -z                              \\"
+  echo "     -print0                                     \\"
+  echo "| env LC_ALL=C sort -z                           \\"
   echo "| while read -d \$'\\0' FILENAME"
   echo "do"
   echo
@@ -1115,7 +1125,7 @@ function show_tile_script()
   echo "        \"PNG32:\$GLOBAL_TARGET_FILE\""
   echo
   echo "# show progress"
-  echo "donemsg \"preview file created: \$GLOBAL_TARGETFILE\""
+  echo "donemsg \"preview file created: \$GLOBAL_TARGET_FILE\""
   echo
   echo "# signalize success"
   echo "exit 0"
