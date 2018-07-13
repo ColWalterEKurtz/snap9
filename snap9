@@ -452,7 +452,7 @@ function show_crop_script()
   echo "  warnmsg \"too many crop settings found: \$GLOBAL_SOURCE_FILE\""
   echo
   echo "  # signalize trouble"
-  echo "  return 1"
+  echo "  exit 1"
   echo
   echo "fi"
   echo
