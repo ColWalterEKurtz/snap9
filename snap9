@@ -190,10 +190,9 @@ function get_video_length()
 #
 function get_video_fps()
 {
-  # get frames per second
+  # get frames per second (cut off decimal places)
   local FPS=$(get_video_stats "$1"                   \
               | sed -nre "s/^ID_VIDEO_FPS=(.+)/\1/p" \
-              | sed -re "s/0+$//"                    \
               | sed -re "s/\.[^\.]+$//"              )
 
   # no frames per second information found
